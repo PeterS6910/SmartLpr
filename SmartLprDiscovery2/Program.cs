@@ -4,77 +4,109 @@ using System.Net.Http;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Net.Http.Headers;
+using System.Text;
+using System.Collections.Generic;
 
 namespace SmartLprDiscovery2
 {
     internal static class Program
     {
         private const string AddressPrefix = "192.168.1.2";
-        private static readonly TimeSpan RequestTimeout = TimeSpan.FromMilliseconds(500);
+        private const int RestPort = 8080;
+        private static readonly TimeSpan RequestTimeout = TimeSpan.FromMilliseconds(200);
 
         private static async Task Main()
         {
-            using (var httpClient = new HttpClient())
+            // TLS 1.2
+            ServicePointManager.SecurityProtocol =
+                SecurityProtocolType.Tls | SecurityProtocolType.Tls11 | SecurityProtocolType.Tls12;
+
+            var handler = new HttpClientHandler();
+            // kamera má self-signed certifikát – povolíme ho
+            handler.ServerCertificateCustomValidationCallback =
+                (msg, cert, chain, errors) => true;
+
+            using (var httpClient = new HttpClient(handler))
             {
                 httpClient.Timeout = RequestTimeout;
 
+                // Basic auth – rovnaké meno/heslo ako máš v Postmane
+                var bytes = Encoding.ASCII.GetBytes("admin:quercus2");
+                httpClient.DefaultRequestHeaders.Authorization =
+                    new AuthenticationHeaderValue("Basic", Convert.ToBase64String(bytes));
+
                 Console.WriteLine("Zacina prehladavanie SmartLpr kamier v rozsahu 192.168.1.200-192.168.1.255...");
 
-                for (var suffix = 0; suffix <= 99; suffix++)
+                // sem budeme pridávať všetky nájdené IP kamery
+                var foundCameras = new List<string>();
+
+                for (var suffix = 0; suffix <= 54; suffix++)
                 {
                     var address = string.Format("{0}{1:D2}", AddressPrefix, suffix);
 
                     IPAddress ip;
                     if (!IPAddress.TryParse(address, out ip))
-                    {
                         continue;
-                    }
 
-                    var handled = await TryHandleAddressAsync(httpClient, address);
-                    if (handled)
+                    var isCamera = await TryHandleAddressAsync(httpClient, address);
+                    if (isCamera)
                     {
-                        return;
+                        foundCameras.Add(address);
                     }
                 }
 
-                Console.WriteLine("SmartLpr kamera sa nenasla.");
+                if (foundCameras.Count == 0)
+                {
+                    Console.WriteLine("SmartLpr kamera sa nenasla.");
+                }
+                else
+                {
+                    Console.WriteLine();
+                    Console.WriteLine("Najdene SmartLpr kamery ({0}):", foundCameras.Count);
+                    foreach (var camIp in foundCameras)
+                    {
+                        Console.WriteLine(" - {0}", camIp);
+                    }
+                }
             }
         }
 
         private static async Task<bool> TryHandleAddressAsync(HttpClient httpClient, string address)
         {
+            // presne to, čo voláš v Postmane:
+            var url = string.Format("https://{0}:{1}/api/v2/status", address, RestPort);
+
             try
             {
-                using (var cts = new CancellationTokenSource(RequestTimeout))
-                using (var response = await httpClient.GetAsync("https://" + address + "/status", cts.Token))
+                using (var response = await httpClient.GetAsync(url))
                 {
-                    if (!response.IsSuccessStatusCode)
-                    {
-                        return false;
-                    }
+                    Console.WriteLine("[{0}] HTTP {1} {2}",
+                                      address, (int)response.StatusCode, response.ReasonPhrase);
 
-                    // V .NET 4.7.2 nie je overload s CancellationToken
+                    if (!response.IsSuccessStatusCode)
+                        return false;
+
                     var payload = await response.Content.ReadAsStringAsync();
 
                     string formattedPayload;
                     if (!IsSmartLprResponse(payload, out formattedPayload))
-                    {
                         return false;
-                    }
 
                     Console.WriteLine("SmartLpr kamera bola detegovana na adrese {0}:", address);
                     Console.WriteLine(formattedPayload);
                     return true;
                 }
             }
-            catch (OperationCanceledException)
+            catch (TaskCanceledException)
             {
-                // Timeout - kamera neodpovedala do 0.5 sekundy.
+                // vypršal httpClient.Timeout
+                Console.WriteLine("[{0}] Timeout po {1} ms", address, RequestTimeout.TotalMilliseconds);
                 return false;
             }
-            catch (HttpRequestException)
+            catch (HttpRequestException ex)
             {
-                // Ziadna odpoved alebo sietovy problem - pokracujeme v hladani.
+                Console.WriteLine("[{0}] HttpRequestException: {1}", address, ex.Message);
                 return false;
             }
         }

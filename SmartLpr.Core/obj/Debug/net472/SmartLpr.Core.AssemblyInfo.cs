@@ -14,7 +14,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("SmartLpr.Core")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+a693b6c8696a0ddf1d664df5f5b6facae72b1495")]
 [assembly: System.Reflection.AssemblyProductAttribute("SmartLpr.Core")]
 [assembly: System.Reflection.AssemblyTitleAttribute("SmartLpr.Core")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

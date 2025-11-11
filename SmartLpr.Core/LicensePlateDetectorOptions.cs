@@ -74,7 +74,7 @@ public sealed class LicensePlateDetectorOptions
                 value.Select(v => v?.Trim().ToLowerInvariant())
                      .Where(v => !string.IsNullOrWhiteSpace(v))
                      .Distinct()
-                     .Select(v => v.StartsWith('.') ? v : "." + v)
+                     .Select(v => v.StartsWith(".") ? v : "." + v)
                      .ToArray());
     }
 
